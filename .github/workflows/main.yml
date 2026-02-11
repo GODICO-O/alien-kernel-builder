@@ -8,16 +8,18 @@ jobs:
     steps:
       - name: Manual Clone Source
         run: |
-          git clone --depth=1 https://github.com/Poco-M5-Development/android_kernel_xiaomi_mt6789.git kernel_source
+          # Langsung tembak branch YUNLUO yang tadi kita temuin
+          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b yunluo-s-oss kernel_source
           
       - name: Install Toolchain & Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison lz4 libssl-dev libelf-dev clang lld llvm
 
-      - name: Kill SELinux
+      - name: Kill SELinux (The Alien Patch)
         run: |
           cd kernel_source
+          # Cari file Kconfig SELinux
           KCONFIG_PATH=$(find . -name Kconfig | grep -i "selinux" | head -n 1)
           if [ -n "$KCONFIG_PATH" ]; then
             sed -i 's/bool "NSA SELinux support"/bool "NSA SELinux support (ALIEN MOD)"/g' $KCONFIG_PATH
@@ -31,13 +33,14 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Auto-detect defconfig
-          CONF=$(ls arch/arm64/configs/ | grep -iE "rock|mt6789" | head -n 1)
-          if [ -z "$CONF" ]; then CONF="gki_defconfig"; fi
+          # Di branch yunluo, biasanya pake gki_defconfig atau rock_defconfig
+          # Kita suruh dia nyari otomatis yang paling cocok
+          CONF=$(ls arch/arm64/configs/ | grep -iE "yunluo|rock|mt6789|gki" | head -n 1)
           echo "Using config: $CONF"
           
           make O=out ARCH=arm64 $CONF
           
+          # Proses masak dengan Clang (Server GitHub bakal kerja keras di sini)
           make -j$(nproc --all) O=out \
                ARCH=arm64 \
                CC=clang \
