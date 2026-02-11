@@ -13,17 +13,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison lz4 libssl-dev libelf-dev clang lld llvm python3 git
-
-      - name: Setup Toolchain (Clang & GCC)
-        run: |
-          mkdir toolchain
-          cd toolchain
-          # Download Clang resmi dari Google
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b1.tar.gz
-          tar -xf clang-r416183b1.tar.gz
-          cd ..
-          echo "$(pwd)/toolchain/bin" >> $GITHUB_PATH
+          sudo apt-get install -y bc build-essential flex bison lz4 libssl-dev libelf-dev clang lld llvm python3 git gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Configure SELinux Policy
         run: |
@@ -40,16 +30,14 @@ jobs:
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Setup Environment secara manual agar tidak 'not found'
-          CLANG_DIR=$(pwd)/../toolchain/bin
-          export PATH="$CLANG_DIR:$PATH"
-          
+          # Gunakan konfigurasi GKI
           CONF="gki_defconfig"
           
-          # Buat file config
-          make O=out ARCH=arm64 $CONF
+          # Siapkan config
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $CONF
+          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           
-          # Mulai masak kernel
+          # Mulai proses compile (Gue rapihin variabel pemanggilannya)
           make -j$(nproc --all) O=out \
                ARCH=arm64 \
                CC=clang \
@@ -61,7 +49,8 @@ jobs:
                NM=llvm-nm \
                OBJCOPY=llvm-objcopy \
                OBJDUMP=llvm-objdump \
-               STRIP=llvm-strip
+               STRIP=llvm-strip \
+               V=0
 
       - name: Export Kernel Artifact
         uses: actions/upload-artifact@v4
