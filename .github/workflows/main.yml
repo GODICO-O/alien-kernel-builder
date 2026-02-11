@@ -1,4 +1,4 @@
-name: Alien Kernel Builder - Poco M5
+name: Kernel Builder - Poco M5
 on:
   workflow_dispatch:
 
@@ -6,41 +6,41 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Manual Clone Source
+      - name: Checkout Kernel Source
         run: |
-          # Langsung tembak branch YUNLUO yang tadi kita temuin
           git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b yunluo-s-oss kernel_source
           
-      - name: Install Toolchain & Dependencies
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison lz4 libssl-dev libelf-dev clang lld llvm
 
-      - name: Kill SELinux (The Alien Patch)
+      - name: Configure SELinux Policy
         run: |
           cd kernel_source
-          # Cari file Kconfig SELinux
+          # Mencari file konfigurasi SELinux secara otomatis
           KCONFIG_PATH=$(find . -name Kconfig | grep -i "selinux" | head -n 1)
           if [ -n "$KCONFIG_PATH" ]; then
-            sed -i 's/bool "NSA SELinux support"/bool "NSA SELinux support (ALIEN MOD)"/g' $KCONFIG_PATH
+            # Mengubah default support SELinux menjadi 'n' (disabled)
             sed -i 's/default y/default n/g' $KCONFIG_PATH
-            echo "SELinux Neutralized at $KCONFIG_PATH"
+            echo "SELinux configuration updated at $KCONFIG_PATH"
           fi
 
-      - name: Build Kernel
+      - name: Build Kernel Image
         run: |
           cd kernel_source
           export ARCH=arm64
           export SUBARCH=arm64
           
-          # Di branch yunluo, biasanya pake gki_defconfig atau rock_defconfig
-          # Kita suruh dia nyari otomatis yang paling cocok
-          CONF=$(ls arch/arm64/configs/ | grep -iE "yunluo|rock|mt6789|gki" | head -n 1)
-          echo "Using config: $CONF"
+          # Menggunakan GKI Defconfig sebagai basis utama
+          CONF="gki_defconfig"
+          echo "Using configuration: $CONF"
           
+          # Menyiapkan file .config
           make O=out ARCH=arm64 $CONF
+          make O=out ARCH=arm64 olddefconfig
           
-          # Proses masak dengan Clang (Server GitHub bakal kerja keras di sini)
+          # Proses kompilasi menggunakan LLVM/Clang
           make -j$(nproc --all) O=out \
                ARCH=arm64 \
                CC=clang \
@@ -50,9 +50,9 @@ jobs:
                OBJDUMP=llvm-objdump \
                STRIP=llvm-strip
 
-      - name: Upload Result
+      - name: Export Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Alien-Kernel-PocoM5
+          name: Kernel-Image-PocoM5
           path: kernel_source/out/arch/arm64/boot/Image.gz
           
