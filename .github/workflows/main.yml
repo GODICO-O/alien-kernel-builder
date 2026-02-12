@@ -2,10 +2,11 @@
         run: |
           CONF=arch/arm64/configs/gki_defconfig
           
-          # --- KERNELSU NEXT (Terbaru) ---
+          # --- KERNELSU NEXT ---
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
           
           # --- FIX MOUNTING /VENDOR (EROFS & FS) ---
+          # Kita pakai echo >> biar pasti nambah di baris paling bawah
           echo "CONFIG_EROFS_FS=y" >> $CONF
           echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
           echo "CONFIG_EROFS_FS_PCPU_KTHREAD=y" >> $CONF
@@ -14,19 +15,28 @@
           echo "CONFIG_UNICODE=y" >> $CONF
           echo "CONFIG_FS_ENCRYPTION=y" >> $CONF
           
-          # --- SELINUX DEVELOP & PERMISSIVE ---
+          # --- SELINUX & PERMISSIVE ---
           sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
-          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
-          # Tambahan buat maksa permissive di beberapa source
           echo "CONFIG_ALWAYS_ENFORCE=n" >> $CONF
           
-          # --- ANTI-PANIC & STABILITY ---
-          # Matikan LTO karena log ramoops tadi indikasi driver mismatch
-          sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
-          sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          # --- DISABLE LTO (STABILITY FIRST) ---
+          # Kita paksa semua LTO jadi n
+          sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_THIN=n/g' $CONF
+          sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_FULL=n/g' $CONF
           echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
           
           # --- CLEANING & BUILD ---
           make O=out ARCH=arm64 $(echo $CONF | cut -d'/' -f4)
-          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
-          
+          make -j$(nproc --all) O=out ARCH=arm64 \
+               CC=clang \
+               LD=ld.lld \
+               AR=llvm-ar \
+               NM=llvm-nm \
+               OBJCOPY=llvm-objcopy \
+               OBJDUMP=llvm-objdump \
+               STRIP=llvm-strip \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+               LLVM=1 \
+               LLVM_IAS=1
+               
