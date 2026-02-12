@@ -1,4 +1,4 @@
-name: Kernel Builder - Poco M5
+name: Build GKI Permissive Precise
 on:
   workflow_dispatch:
 
@@ -6,55 +6,57 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Kernel Source
-        run: |
-          git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b yunluo-s-oss kernel_source
-          
-      - name: Install Build Dependencies
+      - name: Setup Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison lz4 libssl-dev libelf-dev clang lld llvm python3 git gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev clang lld llvm
 
-      - name: Configure SELinux Policy
+      - name: Clone GKI Source
         run: |
-          cd kernel_source
-          KCONFIG_PATH=$(find . -name Kconfig | grep -i "selinux" | head -n 1)
-          if [ -n "$KCONFIG_PATH" ]; then
-            sed -i 's/default y/default n/g' $KCONFIG_PATH
-            echo "SELinux configuration updated."
-          fi
+          git clone --depth=1 https://android.googlesource.com/kernel/common -b android12-5.10 kernel-source
 
-      - name: Build Kernel Image
+      - name: Integrate KernelSU (Official & Stable)
         run: |
-          cd kernel_source
-          export ARCH=arm64
-          export SUBARCH=arm64
+          cd kernel-source
+          # Menggunakan KernelSU Official karena link Next sedang tidak stabil
+          # Ini tetap bisa lo pake buat root dan SuSFS nantinya
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           
-          # Gunakan konfigurasi GKI
-          CONF="gki_defconfig"
-          
-          # Siapkan config
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- $CONF
-          make O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
-          
-          # Mulai proses compile (Gue rapihin variabel pemanggilannya)
-          make -j$(nproc --all) O=out \
-               ARCH=arm64 \
-               CC=clang \
-               CLANG_TRIPLE=aarch64-linux-gnu- \
-               CROSS_COMPILE=aarch64-linux-gnu- \
-               CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-               LD=ld.lld \
-               AR=llvm-ar \
-               NM=llvm-nm \
-               OBJCOPY=llvm-objcopy \
-               OBJDUMP=llvm-objdump \
-               STRIP=llvm-strip \
-               V=0
+          # Aktifkan flag KSU di config
+          CONF="arch/arm64/configs/gki_defconfig"
+          echo "CONFIG_KSU=y" >> $CONF
 
-      - name: Export Kernel Artifact
+      - name: Patch SELinux & Recovery (Force Disable)
+        run: |
+          cd kernel-source
+          CONF="arch/arm64/configs/gki_defconfig"
+          
+          # Ubah n jadi y untuk mode Developer (Permissive)
+          sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
+          sed -i 's/CONFIG_SECURITY_SELINUX_BOOTPARAM=n/CONFIG_SECURITY_SELINUX_BOOTPARAM=y/g' $CONF
+          
+          # Pastikan barisnya ada
+          grep -q "CONFIG_SECURITY_SELINUX_DEVELOP=y" $CONF || echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
+          grep -q "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" $CONF || echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> $CONF
+          
+          # Support Recovery & Mount
+          echo "CONFIG_DEVTMPFS=y" >> $CONF
+          echo "CONFIG_DEVTMPFS_MOUNT=y" >> $CONF
+          echo "CONFIG_OVERLAY_FS=y" >> $CONF
+          
+          # Paksa CMDLINE Permissive & Abaikan Bootloader
+          echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive\"" >> $CONF
+          echo "CONFIG_CMDLINE_FORCE=y" >> $CONF
+
+      - name: Build Kernel
+        run: |
+          cd kernel-source
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 gki_defconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 -j$(nproc) Image.gz
+
+      - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Image-PocoM5
-          path: kernel_source/out/arch/arm64/boot/Image.gz
+          name: Kernel-PocoM5-Permissive-KSU
+          path: kernel-source/arch/arm64/boot/Image.gz
           
