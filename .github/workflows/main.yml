@@ -1,4 +1,4 @@
-name: Build Kernel Picasso PE-Compatible Final
+name: Build Kernel Picasso PE-Compatible Final (No-LTO)
 on:
   workflow_dispatch:
 
@@ -13,7 +13,6 @@ jobs:
 
       - name: Clone Picasso Source
         run: |
-          # Menggunakan source yang lo kasih tadi
           git clone --depth=1 https://github.com/picasso09/android_kernel_gki-android12-9 kernel-source
 
       - name: Integrate KernelSU
@@ -32,7 +31,6 @@ jobs:
           echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> $CONF
           
           # --- 2. EROFS & LZ4 (OBAT BOOTLOOP PE) ---
-          # Ini kunci biar gak "Invalid Ext4 Superblock" lagi
           echo "CONFIG_EROFS_FS=y" >> $CONF
           echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
           echo "CONFIG_EROFS_FS_PCPU_KTHREAD=y" >> $CONF
@@ -42,31 +40,29 @@ jobs:
           echo "CONFIG_LZ4_DECOMPRESS_FAST=y" >> $CONF
           
           # --- 3. SELINUX PERMISSIVE (FULL FORCE) ---
-          # Kita hajar lewat config dan command line sekaligus
           sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
           sed -i 's/CONFIG_SECURITY_SELINUX_BOOTPARAM=n/CONFIG_SECURITY_SELINUX_BOOTPARAM=y/g' $CONF
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive androidboot.veritymode=logging\"" >> $CONF
           echo "CONFIG_CMDLINE_FORCE=y" >> $CONF
           
-          # --- 4. LTO & PERFORMANCE ---
-          sed -i 's/CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/g' $CONF
+          # --- 4. DISABLE LTO & OPTIMIZATION (RAM SAFE) ---
+          # Kita paksa matikan LTO biar nggak kena 'Killed'
+          sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
           echo "CONFIG_THREAD_INFO_IN_TASK=y" >> $CONF
 
       - name: Build Kernel
         run: |
           cd kernel-source
-          # Jalankan defconfig awal
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 gki_defconfig
-          
-          # Sinkronisasi config baru agar tidak bentrok
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 olddefconfig
-          
-          # Build Image.gz (Otot Kernel)
+          # Build dengan power penuh karena tanpa LTO RAM bakal aman
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 -j$(nproc) Image.gz
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-PocoM5-PE-Final
+          name: Kernel-PocoM5-PE-Final-NoLTO
           path: kernel-source/arch/arm64/boot/Image.gz
           
