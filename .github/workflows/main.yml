@@ -1,4 +1,4 @@
-name: Build Kernel Picasso Ultimate Official (Fix KSU)
+name: Build Kernel Picasso Ultimate Official (Final Version)
 on:
   workflow_dispatch:
 
@@ -20,57 +20,65 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev clang lld llvm repo
 
-      - name: Sync Source (Picasso Official Path)
+      - name: Sync Source (Official Path)
         run: |
           mkdir kernel-source && cd kernel-source
           repo init -u https://github.com/DVWorkspaces/kernel_gki_android12-9 -b nethunter
           repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
 
-      - name: Integrate KernelSU (Manual Fix)
+      - name: Integrate KernelSU (Manual Linker Fix)
         run: |
           cd kernel-source/common
           # Jalankan setup.sh resmi
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           
-          # FIX: Memastikan ksu terdaftar di drivers/Makefile agar tidak 'undefined symbol'
+          # RAHASIA SUKSES: Memaksa kernelsu masuk ke daftar linking drivers
+          # Ini obat error 'undefined symbol: ksu_handle_sys_read'
           if ! grep -q "obj-y += kernelsu/" drivers/Makefile; then
             echo "obj-y += kernelsu/" >> drivers/Makefile
           fi
 
-      - name: Patch Config (SELinux-Dev, Pstore & KSU)
+      - name: Patch Config (Fitur Sakti & Log Lengkap)
         run: |
           cd kernel-source/common
           CONF="arch/arm64/configs/gki_defconfig"
           
-          # Pastikan KSU aktif di config
+          # --- 1. KERNELSU ---
           sed -i '/CONFIG_KSU/d' $CONF
           echo "CONFIG_KSU=y" >> $CONF
           
-          # SELINUX SAKTI (Wajib Y)
+          # --- 2. SELINUX SAKTI (Wajib Y) ---
           sed -i '/CONFIG_SECURITY_SELINUX_DEVELOP/d' $CONF
           sed -i '/CONFIG_SECURITY_SELINUX_BOOTPARAM/d' $CONF
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
           echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> $CONF
           
-          # CMDLINE & PERMISSIVE (EXTEND Mode)
+          # --- 3. CMDLINE & PERMISSIVE (EXTEND Mode) ---
           sed -i '/CONFIG_CMDLINE_FORCE/d' $CONF
           sed -i '/CONFIG_CMDLINE=/d' $CONF
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive androidboot.veritymode=logging\"" >> $CONF
           echo "CONFIG_CMDLINE_EXTEND=y" >> $CONF
 
-          # SAFETY LOGS (PSTORE)
+          # --- 4. SAFETY LOGS (PSTORE/RAMOOPS) ---
+          # Fitur buat simpen log error biar bisa dibaca di HP langsung
           echo "CONFIG_PSTORE=y" >> $CONF
           echo "CONFIG_PSTORE_CONSOLE=y" >> $CONF
+          echo "CONFIG_PSTORE_PMSG=y" >> $CONF
           echo "CONFIG_PSTORE_RAM=y" >> $CONF
           sed -i '/CONFIG_PANIC_TIMEOUT/d' $CONF
           echo "CONFIG_PANIC_TIMEOUT=30" >> $CONF
 
-          # DISABLE LTO
+          # --- 5. FILESYSTEM & OPTIMASI ---
+          echo "CONFIG_EROFS_FS=y" >> $CONF
+          echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
+          echo "CONFIG_OVERLAY_FS=y" >> $CONF
+
+          # --- 6. DISABLE LTO (Wajib agar RAM GitHub gak jebol) ---
           sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
 
-      - name: Build Kernel
+      - name: Build Kernel (Official GKI Script)
         run: |
           cd kernel-source
           export LTO=none
