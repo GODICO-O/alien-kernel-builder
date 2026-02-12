@@ -18,45 +18,51 @@ jobs:
       - name: Integrate KernelSU (Official & Stable)
         run: |
           cd kernel-source
-          # Menggunakan KernelSU Official karena link Next sedang tidak stabil
-          # Ini tetap bisa lo pake buat root dan SuSFS nantinya
+          # Menggunakan KernelSU Official (Tiann) yang terbukti stabil kodenya
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           
           # Aktifkan flag KSU di config
           CONF="arch/arm64/configs/gki_defconfig"
           echo "CONFIG_KSU=y" >> $CONF
 
-      - name: Patch SELinux & Recovery (Force Disable)
+      - name: Patch Configuration (Force Permissive & Disable LTO)
         run: |
           cd kernel-source
           CONF="arch/arm64/configs/gki_defconfig"
           
-          # Ubah n jadi y untuk mode Developer (Permissive)
+          # --- ANTI KILLED: Disable LTO agar RAM GitHub tidak jebol ---
+          sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
+          
+          # --- SELINUX: Force Permissive (Sesuai request lo: Harus 'y') ---
           sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
           sed -i 's/CONFIG_SECURITY_SELINUX_BOOTPARAM=n/CONFIG_SECURITY_SELINUX_BOOTPARAM=y/g' $CONF
           
-          # Pastikan barisnya ada
+          # Pastikan barisnya ada (Double Check)
           grep -q "CONFIG_SECURITY_SELINUX_DEVELOP=y" $CONF || echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
           grep -q "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" $CONF || echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> $CONF
           
-          # Support Recovery & Mount
+          # --- RECOVERY & MOUNT SUPPORT ---
           echo "CONFIG_DEVTMPFS=y" >> $CONF
           echo "CONFIG_DEVTMPFS_MOUNT=y" >> $CONF
           echo "CONFIG_OVERLAY_FS=y" >> $CONF
           
-          # Paksa CMDLINE Permissive & Abaikan Bootloader
+          # --- CMDLINE: Paksa Permissive di level Boot ---
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive\"" >> $CONF
           echo "CONFIG_CMDLINE_FORCE=y" >> $CONF
 
       - name: Build Kernel
         run: |
           cd kernel-source
+          # Generate config awal
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 gki_defconfig
+          
+          # Eksekusi build (Sudah tanpa LTO, harusnya lancar)
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 -j$(nproc) Image.gz
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-PocoM5-Permissive-KSU
+          name: Kernel-PocoM5-Permissive-KSU-Final
           path: kernel-source/arch/arm64/boot/Image.gz
-          
