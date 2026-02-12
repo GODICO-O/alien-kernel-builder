@@ -88,4 +88,3 @@ jobs:
         with:
           name: Kernel-PocoM5-Picasso-Final
           path: kernel-source/out/arch/arm64/boot/Image.gz
-          
