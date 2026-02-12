@@ -1,4 +1,4 @@
-name: Build Kernel Picasso Ultimate Official
+name: Build Kernel Picasso Ultimate Official (Fix KSU)
 on:
   workflow_dispatch:
 
@@ -26,45 +26,53 @@ jobs:
           repo init -u https://github.com/DVWorkspaces/kernel_gki_android12-9 -b nethunter
           repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
 
+      - name: Integrate KernelSU (Manual Fix)
+        run: |
+          cd kernel-source/common
+          # Jalankan setup.sh resmi
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          
+          # FIX: Memastikan ksu terdaftar di drivers/Makefile agar tidak 'undefined symbol'
+          if ! grep -q "obj-y += kernelsu/" drivers/Makefile; then
+            echo "obj-y += kernelsu/" >> drivers/Makefile
+          fi
+
       - name: Patch Config (SELinux-Dev, Pstore & KSU)
         run: |
           cd kernel-source/common
-          
-          # 1. Integrasi KernelSU
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-          
           CONF="arch/arm64/configs/gki_defconfig"
           
-          # 2. SELINUX SAKTI (Wajib Y sesuai request lo)
-          # Kita hapus dulu yang lama (n) baru kita suntik yang baru (y) biar gak override warning
+          # Pastikan KSU aktif di config
+          sed -i '/CONFIG_KSU/d' $CONF
+          echo "CONFIG_KSU=y" >> $CONF
+          
+          # SELINUX SAKTI (Wajib Y)
           sed -i '/CONFIG_SECURITY_SELINUX_DEVELOP/d' $CONF
           sed -i '/CONFIG_SECURITY_SELINUX_BOOTPARAM/d' $CONF
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
           echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> $CONF
           
-          # 3. CMDLINE & PERMISSIVE (EXTEND Mode - Anti Panic)
+          # CMDLINE & PERMISSIVE (EXTEND Mode)
           sed -i '/CONFIG_CMDLINE_FORCE/d' $CONF
           sed -i '/CONFIG_CMDLINE=/d' $CONF
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive androidboot.veritymode=logging\"" >> $CONF
           echo "CONFIG_CMDLINE_EXTEND=y" >> $CONF
 
-          # 4. SAFETY LOGS (PSTORE/RAMOOPS)
+          # SAFETY LOGS (PSTORE)
           echo "CONFIG_PSTORE=y" >> $CONF
           echo "CONFIG_PSTORE_CONSOLE=y" >> $CONF
-          echo "CONFIG_PSTORE_PMSG=y" >> $CONF
           echo "CONFIG_PSTORE_RAM=y" >> $CONF
           sed -i '/CONFIG_PANIC_TIMEOUT/d' $CONF
           echo "CONFIG_PANIC_TIMEOUT=30" >> $CONF
 
-          # 5. FILESYSTEM & RAM
-          echo "CONFIG_EROFS_FS=y" >> $CONF
-          echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
-          echo "CONFIG_OVERLAY_FS=y" >> $CONF
+          # DISABLE LTO
+          sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
+          echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
 
-      - name: Build Kernel (Official GKI Script)
+      - name: Build Kernel
         run: |
           cd kernel-source
-          # FIX: LTO harus 'none' huruf kecil agar dibaca build.sh
           export LTO=none
           export BUILD_CONFIG=common/build.config.gki.aarch64
           export SKIP_MRPROPER=1
