@@ -16,13 +16,12 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # Path config GKI
           CONF=arch/arm64/configs/gki_defconfig
           
-          # 1. SETUP KERNELSU NEXT
+          # Setup KernelSU
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
           
-          # 2. FIX MOUNTING /VENDOR (EROFS & STORAGE)
+          # Fix EROFS & Mounting
           echo "CONFIG_EROFS_FS=y" >> $CONF
           echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
           echo "CONFIG_EROFS_FS_PCPU_KTHREAD=y" >> $CONF
@@ -31,34 +30,22 @@ jobs:
           echo "CONFIG_UNICODE=y" >> $CONF
           echo "CONFIG_FS_ENCRYPTION=y" >> $CONF
           
-          # 3. SELINUX DEVELOP & PERMISSIVE
+          # SELinux & Permissive
           sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
           echo "CONFIG_ALWAYS_ENFORCE=n" >> $CONF
           
-          # 4. DISABLE LTO (STABILITAS)
+          # Disable LTO
           sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_THIN=n/g' $CONF
           sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_FULL=n/g' $CONF
           echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
           
-          # 5. PROSES KOMPILASI
-          # Menggunakan full LLVM toolchain
+          # Build
           make O=out ARCH=arm64 $(echo $CONF | cut -d'/' -f4)
-          make -j$(nproc --all) O=out ARCH=arm64 \
-               CC=clang \
-               LD=ld.lld \
-               AR=llvm-ar \
-               NM=llvm-nm \
-               OBJCOPY=llvm-objcopy \
-               OBJDUMP=llvm-objdump \
-               STRIP=llvm-strip \
-               CROSS_COMPILE=aarch64-linux-gnu- \
-               CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
-               LLVM=1 \
-               LLVM_IAS=1
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1
 
-      - name: Upload Kernel Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-PocoM5-Fixed-EROFS
+          name: Kernel-PocoM5-Fixed
           path: out/arch/arm64/boot/Image.gz
           
