@@ -1,4 +1,4 @@
-name: Build Kernel Picasso Ultimate Official (Final Version)
+name: Build Kernel Picasso Ultimate Official (Final Fix KSU)
 on:
   workflow_dispatch:
 
@@ -20,47 +20,49 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev clang lld llvm repo
 
-      - name: Sync Source (Official Path)
+      - name: Sync Source
         run: |
           mkdir kernel-source && cd kernel-source
           repo init -u https://github.com/DVWorkspaces/kernel_gki_android12-9 -b nethunter
           repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
 
-      - name: Integrate KernelSU (Manual Linker Fix)
+      - name: Integrate KernelSU (Direct Core Injection)
         run: |
+          # Masuk ke folder inti kernel
           cd kernel-source/common
-          # Jalankan setup.sh resmi
+          
+          # Jalankan setup resmi
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
           
-          # RAHASIA SUKSES: Memaksa kernelsu masuk ke daftar linking drivers
-          # Ini obat error 'undefined symbol: ksu_handle_sys_read'
-          if ! grep -q "obj-y += kernelsu/" drivers/Makefile; then
-            echo "obj-y += kernelsu/" >> drivers/Makefile
-          fi
+          # FIX TERBAIK: Daftarkan KernelSU di Makefile inti (Core Makefile)
+          # Kita tambahkan ksu ke dalam daftar objek yang wajib di-build
+          sed -i '/drivers-y/i obj-y += drivers/kernelsu/' Makefile
+          
+          # Verifikasi lokasi (Pastikan folder ksu ada di drivers)
+          ls drivers/kernelsu/ || echo "Folder KSU tidak ditemukan!"
 
-      - name: Patch Config (Fitur Sakti & Log Lengkap)
+      - name: Patch Config (Ultimate Features)
         run: |
           cd kernel-source/common
           CONF="arch/arm64/configs/gki_defconfig"
           
-          # --- 1. KERNELSU ---
+          # Clean & Set KSU
           sed -i '/CONFIG_KSU/d' $CONF
           echo "CONFIG_KSU=y" >> $CONF
           
-          # --- 2. SELINUX SAKTI (Wajib Y) ---
+          # SELINUX SAKTI (Develop & Bootparam)
           sed -i '/CONFIG_SECURITY_SELINUX_DEVELOP/d' $CONF
           sed -i '/CONFIG_SECURITY_SELINUX_BOOTPARAM/d' $CONF
           echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> $CONF
           echo "CONFIG_SECURITY_SELINUX_BOOTPARAM=y" >> $CONF
           
-          # --- 3. CMDLINE & PERMISSIVE (EXTEND Mode) ---
+          # CMDLINE EXTEND (Anti Panic EROFS)
           sed -i '/CONFIG_CMDLINE_FORCE/d' $CONF
           sed -i '/CONFIG_CMDLINE=/d' $CONF
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive androidboot.veritymode=logging\"" >> $CONF
           echo "CONFIG_CMDLINE_EXTEND=y" >> $CONF
 
-          # --- 4. SAFETY LOGS (PSTORE/RAMOOPS) ---
-          # Fitur buat simpen log error biar bisa dibaca di HP langsung
+          # SAFETY LOGS (PSTORE/RAMOOPS)
           echo "CONFIG_PSTORE=y" >> $CONF
           echo "CONFIG_PSTORE_CONSOLE=y" >> $CONF
           echo "CONFIG_PSTORE_PMSG=y" >> $CONF
@@ -68,17 +70,12 @@ jobs:
           sed -i '/CONFIG_PANIC_TIMEOUT/d' $CONF
           echo "CONFIG_PANIC_TIMEOUT=30" >> $CONF
 
-          # --- 5. FILESYSTEM & OPTIMASI ---
-          echo "CONFIG_EROFS_FS=y" >> $CONF
-          echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
-          echo "CONFIG_OVERLAY_FS=y" >> $CONF
-
-          # --- 6. DISABLE LTO (Wajib agar RAM GitHub gak jebol) ---
+          # DISABLE LTO
           sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
 
-      - name: Build Kernel (Official GKI Script)
+      - name: Build Kernel
         run: |
           cd kernel-source
           export LTO=none
@@ -89,6 +86,6 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Picasso-Ultimate-GKI
+          name: Kernel-Picasso-Ultimate-Fixed
           path: kernel-source/out/android12-5.10/dist/Image.gz
           
