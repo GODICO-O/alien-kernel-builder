@@ -31,6 +31,7 @@ jobs:
           echo "CONFIG_OVERLAY_FS_REDIRECT_DIR=y" >> $CONF
           
           # --- 2. EROFS & LZ4 (OBAT BOOTLOOP PE) ---
+          # Kita pastikan driver ini masuk ke dalam biner kernel
           echo "CONFIG_EROFS_FS=y" >> $CONF
           echo "CONFIG_EROFS_FS_ZIP=y" >> $CONF
           echo "CONFIG_EROFS_FS_PCPU_KTHREAD=y" >> $CONF
@@ -39,14 +40,17 @@ jobs:
           echo "CONFIG_LZ4HC_DECOMPRESS=y" >> $CONF
           echo "CONFIG_LZ4_DECOMPRESS_FAST=y" >> $CONF
           
-          # --- 3. SELINUX PERMISSIVE (FULL FORCE) ---
+          # --- 3. SELINUX PERMISSIVE (REVISI: ANTI BLANK) ---
+          # Kita pakai EXTEND, bukan FORCE. 
+          # FORCE bikin kernel gagal baca fstab EROFS dari vendor_boot.
           sed -i 's/CONFIG_SECURITY_SELINUX_DEVELOP=n/CONFIG_SECURITY_SELINUX_DEVELOP=y/g' $CONF
           sed -i 's/CONFIG_SECURITY_SELINUX_BOOTPARAM=n/CONFIG_SECURITY_SELINUX_BOOTPARAM=y/g' $CONF
           echo "CONFIG_CMDLINE=\"androidboot.selinux=permissive androidboot.veritymode=logging\"" >> $CONF
-          echo "CONFIG_CMDLINE_FORCE=y" >> $CONF
+          echo "CONFIG_CMDLINE_EXTEND=y" >> $CONF
+          # Hapus FORCE agar kernel mau dengerin instruksi mount dari sistem
+          sed -i '/CONFIG_CMDLINE_FORCE/d' $CONF
           
-          # --- 4. DISABLE LTO & OPTIMIZATION (RAM SAFE) ---
-          # Kita paksa matikan LTO biar nggak kena 'Killed'
+          # --- 4. DISABLE LTO & OPTIMIZATION ---
           sed -i 's/CONFIG_LTO_CLANG_THIN=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_NONE=y/g' $CONF
           echo "CONFIG_LTO_CLANG_NONE=y" >> $CONF
@@ -57,7 +61,7 @@ jobs:
           cd kernel-source
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 gki_defconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 olddefconfig
-          # Build dengan power penuh karena tanpa LTO RAM bakal aman
+          # Menggunakan -j$(nproc) untuk kecepatan maksimal
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 -j$(nproc) Image.gz
 
       - name: Upload Result
